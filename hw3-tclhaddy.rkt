@@ -56,10 +56,6 @@
 (getcen1 '((0 0)(3 0)(0 3))) ;;Expected (1 1)
 
 ;;1D)
-(define (get-median-odd pts)
-  (if (even? (length pts))
-      (list (avg))
-      (index (+ (/ (length pts) 2)) pts)))
 
 ;;1E)
 
