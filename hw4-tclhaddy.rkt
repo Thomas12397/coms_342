@@ -84,11 +84,52 @@
 
 ;Problem: 2)
 
-(define (getSymbol Env Sym)
+(define (getSymbolValue Env Sym)
   (if (equal? Sym (caar Env))
-      (cadar Env)
-      (getSymbol (cdr Env) Sym)))
+      (caadr Env)
+      (getSymbolValue (cdr Env) Sym)))
 
-(getSymbol '((x 1) (y 5)) 'y)
+(define (updateSymbolValue Env Sym Var)
+  (if (equal? Sym (caar Env))
+      (cons (list Sym Var)
+            (cdr Env))
+      (cons (car Env)
+            (updateSymbolValue (cdr Env) Sym Var))))
+
+(define (map Function Collection)
+  (if (empty? Collection)
+      '()
+      (cons (Function (car )))))
+
+(define (GreaterThan arg)
+  (> (car arg) (cadr arg)))
+
+(define (Equals arg)
+  (= (car arg) (cadr arg)))
+
+(define (LessThan arg)
+  (< (car arg) (cadr arg)))
+
+(define (And arg)
+  (and (car arg) (cadr arg)))
+
+(define (Or arg)
+  (or (car arg) (cadr arg)))
+
+(define (Not arg)
+  (not (car arg)))
+
+(define (getOpSem)
+  (cond [(equal? getOpSem 'gt) GreaterThan]
+        [(equal? getOpSem 'lt) LessThan]
+        [(equal? getOpSem 'eq) Equals]
+        [(equal? getOpSem 'and) And]
+        [(equal? getOpSem 'or) Or]
+        [(equal? getOpSem 'not) Not]))
+
+
+
+
+(getSymbolValue '((x 1) (y 5)) 'y)
  
   
