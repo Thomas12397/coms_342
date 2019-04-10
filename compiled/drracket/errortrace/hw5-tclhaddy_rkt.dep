@@ -1,0 +1,1 @@
+("7.2" racket ("8c8c70fd86c855caf4246a3c72b0c8cd8c838b86" . "604a73f642894db55354f8b490c41f6192df22b4") #"C:\\Users\\thoma\\Documents\\coms_342\\program.rkt" (collects #"errortrace" #"errortrace-key.rkt") (collects #"racket" #"main.rkt") (collects #"racket" #"runtime-config.rkt") (collects #"racket" #"trace.rkt"))

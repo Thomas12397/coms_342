@@ -1,50 +1,144 @@
 #lang racket
+(require "hw5-tclhaddy.rkt")
 
-(define p0
-'(
-  (fundecl (f (x)) (
-                    (assign y (+ x 1)))
-           )
-  (decl y)
-  (call (f (0)))
-  )
-  )
+(define p0 '((fundecl (f (x))
+                      ((assign y (+ x 1))))
+             (decl y)
+             (call (f (0)))))
 
-(define p1
-  '(
-    (fundecl (f (x)) (
-                      (assign y (+ x 1)))
-             )
-    (decl y)
-    (decl z)
-    (assign z f)
-    (call (z (0)))
-    )
-  )
+(define a0 '((y 1)
+             ((f (x)) ((assign y (+ x 1))))))
 
-(define p2
-  '(
-    (decl y)
-    (decl z)
-    (assign z f)
-    (call (z (0)))
-    )
-  )
+(define (run0) (when (not (equal? (sem p0 '()) a0))
+                 (writeln "p0 failed with")
+                 (writeln (sem p0 '()))
+                 (writeln "expected")
+                 a0))
 
-(define p3
-  '(
-    )
-  )
+(define p1 '((fundecl (f (x))
+                      ((assign y (+ x 1))))
+             (decl y)
+             (decl z)
+             (assign z f)
+             (call (z (0)))))
 
-(sem p0 '())
-;; expected result for ’() input environment is
-;; ’((y 1) ((f (x)) ((assign y (+ x 1)))))
+(define a1 '((z ((x) ((assign y (+ x 1)))))
+             (y 1)
+             ((f (x)) ((assign y (+ x 1))))))
 
-(sem p1 '())
-;; expected result for ’() input environment is
-;; ((y 1) (z f) ((f (x)) ((assign y (+ x 1)))))
+(define (run1) (when (not (equal? (sem p1 '()) a1))
+                 (writeln "p1 failed with")
+                 (writeln (sem p1 '()))
+                 (writeln "expected")
+                 a1))
 
-(sem p2 '(((f (x)) ((assign y (+ x 1))))))
-;; expected result for ’(((f (x)) ((assign y (+ x 1)))))
-;; (((f (x)) ((assign y (+ x 1)))) (y 1) (z f))
+(define p2 '((decl y)
+             (decl z)
+             (assign z f)
+             (call (z (0)))))
 
+(define a2 '((z 5000) (y 0) ((f (x)) ((assign z 5000)))))
+
+(define (run2) (when (not (equal? (sem p2 '(((f (x)) ((assign z 5000))))) a2))
+                 (writeln "p2 failed with")
+                 (writeln (sem p2 '(((f (x)) ((assign z 5000))))))
+                 (writeln "expected")
+                 a2))
+
+(define p3 '((decl x)
+             (decl y)
+             (fundecl (f (x))
+                      ((fundecl (g (x))
+                                ((assign y 500)))
+                       (call (g (0)))))
+             (call (f (0)))))
+
+(define a3 '(((f (x)) ((fundecl (g (x)) ((assign y 500))) (call (g (0)))))
+             (y 500)
+             (x 0)))
+
+(define (run3) (when (not (equal? (sem p3 '()) a3))
+                 (writeln "p3 failed with")
+                 (writeln (sem p3 '()))
+                 (writeln "expected")
+                 a3))
+
+(define p4 '((decl x)
+             (decl y)
+             (fundecl (f (x))
+                      ((fundecl (g (x))
+                                ((fundecl (f (x))
+                                          ((assign y 500)
+                                           (assign x 100)))
+                                 (call (f (0)))))
+                       (call (g (0)))))
+             (call (f (0)))))
+
+(define a4 '(((f (x)) ((fundecl (g (x))
+                                ((fundecl (f (x))
+                                          ((assign y 500)
+                                           (assign x 100)))
+                                 (call (f (0)))))
+                       (call (g (0)))))
+             (y 500)
+             (x 0)))
+
+(define (run4) (when (not (equal? (sem p4 '()) a4))
+                 (writeln "p4 failed with")
+                 (writeln (sem p4 '()))
+                 (writeln "expected")
+                 a4))
+
+(define p5 '((decl x) 
+             (fundecl (add ())
+                      ((assign x (+ 20 x)))) 
+             (fundecl (callit (f)) 
+                      ((call (f ()))))
+             (call (callit (add)))))
+
+(define a5 '(((callit (f)) ((call (f ()))))
+             ((add ()) ((assign x (+ 20 x))))
+             (x 20)))
+
+(define (run5) (when (not (equal? (sem p5 '()) a5))
+                 (writeln "p5 failed with")
+                 (writeln (sem p5 '()))
+                 (writeln "expected")
+                 a5))
+
+(define p6 '((decl y)
+             (fundecl (f (x)) ((assign x 5)))
+             (call (f (y)))))
+
+(define a6 '(((f (x)) ((assign x 5)))
+             (y 0)))
+
+(define (run6) (when (not (equal? (sem p6 '()) a6))
+                 (writeln "p6 failed with")
+                 (writeln (sem p6 '()))
+                 (writeln "expected")
+                 a6))
+
+(define p7 '((decl y)
+             (fundecl (f (x)) ((assign y (+ 5 x))))
+             (call (f ((+ y 10))))))
+
+(define a7 '(((f (x)) ((assign y (+ 5 x)))) (y 15)))
+
+(define (run7) (when (not (equal? (sem p7 '()) a7))
+                 (writeln "p7 failed with")
+                 (writeln (sem p7 '()))
+                 (writeln "expected")
+                 a7))
+
+(define (testall)
+  (run0)
+  (run1)
+  (run2)
+  (run3)
+  (run4)
+  (run5)
+  (run6)
+  (run7))
+
+(testall)
