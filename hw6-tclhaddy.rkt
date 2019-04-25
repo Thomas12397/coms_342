@@ -39,66 +39,65 @@
                                                         (cons (list '$m 0) Env) Heap))]
     ;;References
     [(equal? (car S) 'ref) (semref Env Heap (cadr S) (caddr S))]
-    [(equal? (car S) 'deref) (semderef Env Heap (cadr S) (semArith (caddr S) Env))]
-    [(equal? (car S) 'free) (semfree Env Heap (semArith (cadr S) Env))]
+    [(equal? (car S) 'deref) (semDeref Env Heap (cadr S) (semArith (caddr S) Env))]
+    [(equal? (car S) 'free) (semFree Env Heap (semArith (cadr S) Env))]
     [(equal? (car S) 'wref) (semWRef Env Heap (semArith (cadr S) Env) (semArith (caddr S) Env))]))
 
-(define (semWRef env Heap dest source)
-  (list env
+;; Semantics of a wref
+(define (semWRef Env Heap Dst Src)
+  (list Env
         (cond
-          [(not (has-i? Heap dest)) '(ooma)]
-          [(equal? 'free (get-Heap Heap dest)) '(fma)]
-          [else (update-i Heap dest source)])))
+          [(not (hasIndex? Heap Dst)) '(ooma)]
+          [(equal? 'free (get-Heap Heap Dst)) '(fma)]
+          [else (updateIndex Heap Dst Src)])))
 
 ;; Does the Heap contain the index i?
-;; (has-i? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 2)
+;; (hasIndex? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 2)
 ;; #t
 ;;
-;; (has-i? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 3)
+;; (hasIndex? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 3)
 ;; #f
-(define (has-i? Heap i)
+(define (hasIndex? Heap Index)
   (if (null? Heap)
       #f
-      (or (equal? i (caar Heap))
-          (has-i? (cdr Heap) i))))
+      (or (equal? Index (car (car Heap)))
+          (hasIndex? (cdr Heap) Index))))
 
 ;; change the value of index i
-;; (update-i '((1 1) (2 2)) 2 'sausage)
+;; (updateIndex '((1 1) (2 2)) 2 'sausage)
 ;; '((1 1) (2 sausage))
 ;;
-;; (update-i '((1 1) (2 2)) 3 'sausage)
+;; (updateIndex '((1 1) (2 2)) 3 'sausage)
 ;; THIS WILL CRASH
-(define (update-i Heap i v)
-  (if (equal? (caar Heap) i)
-      (cons (list (caar Heap) v)
+(define (updateIndex Heap Index Value)
+  (if (equal? (car (car Heap)) Index)
+      (cons (list (car (car Heap)) Value)
             (cdr Heap))
-      (cons (car Heap) (update-i (cdr Heap) i v))))
+      (cons (car Heap) (updateIndex (cdr Heap) Index Value))))
+
+;; Semantics of free
+(define (semFree Env Heap Index)
+  (if (hasIndex? Heap Index)
+      (list Env (updateIndex Heap Index 'free))
+      (list Env '(ooma))))
 
 ;; from the pdf
-;; (semfree '((x billybobdundiddly)) '((1 23343243)) 1)
-;; '(((x billybobdundiddly)) ((1 free)))
-(define (semfree env Heap i)
-  (if (has-i? Heap i)
-      (list env (update-i Heap i 'free))
-      (list env '(ooma))))
-
-;; from the pdf
-;; (semderef '((y 0)) '((1 200)) 'y 1)
+;; (semDeref '((y 0)) '((1 200)) 'y 1)
 ;; '(((y 200)) ((1 200)))
-(define (semderef env Heap dest source)
+(define (semDeref Env Heap Dst Src)
   (cond
-    [(symbol? (car Heap)) (list env Heap)]
-    [(equal? 'free (get-Heap Heap source)) (list env '(fma))]
-    [else (list (updateValue dest (get-Heap Heap source) env) Heap)]))
+    [(symbol? (car Heap)) (list Env Heap)]
+    [(equal? 'free (get-Heap Heap Src)) (list Env '(fma))]
+    [else (list (updateValue Dst (get-Heap Heap Src) Env) Heap)]))
 
 ;; is this entry free
-;; (entry-free? '(1 free))
+;; (isEntryFree? '(1 free))
 ;; #t
 ;;
-;; (entry-free? '(1 23324324))
+;; (isEntryFree? '(1 23324324))
 ;; #f
-(define (entry-free? entry)  
-  (equal? 'free (cadr entry)))
+(define (isEntryFree? Entry)  
+  (equal? 'free (car (cdr Entry))))
 
 ;; is there a free space in the Heap?
 ;; (Heap-free? '((1 2343) (2 free)))
@@ -109,25 +108,25 @@
 (define (Heap-free? Heap)
   (if (null? Heap)
       #f
-      (or (entry-free? (car Heap))
+      (or (isEntryFree? (car Heap))
           (Heap-free? (cdr Heap)))))
 
 ;; first free entry
 ;; (first-free '((1 233) (2 free) (3 free)))
 ;; '(2 free)
 (define (first-free Heap)
-  (if (entry-free? (car Heap))
+  (if (isEntryFree? (car Heap))
       (car Heap)
       (first-free (cdr Heap))))
 
 ;; from the pdf
 ;; (semref '((x 0)) '((1 free)) 'x 123)
 ;; '(((x 1)) ((1 123)))
-(define (semref env Heap var val)
+(define (semref Env Heap var val)
   (if (Heap-free? Heap)
-      (list (updateValue var (car (first-free Heap)) env)
+      (list (updateValue var (car (first-free Heap)) Env)
             (update-Heap Heap val))
-      (list env '(oom))))
+      (list Env '(oom))))
 
 ;; (update-entry '(1 free) 23)
 ;; '(1 23)
@@ -137,7 +136,7 @@
 ;; (update-Heap '((1 free) (2 free)) 123)
 ;; '((1 123) (2 free))
 (define (update-Heap Heap v)
-  (if (entry-free? (car Heap))
+  (if (isEntryFree? (car Heap))
       (cons (update-entry (car Heap) v)
             (cdr Heap))
       (cons (car Heap)
@@ -224,7 +223,7 @@
 
 
 
-
+; semantics of Arithmetic expressions
 (define (semArith Expr Env)
   (cond
     [ (number? Expr)          Expr ]
