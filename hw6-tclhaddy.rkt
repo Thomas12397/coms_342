@@ -1,10 +1,72 @@
 #lang racket
-;; Author: Thomas Haddy
-(require racket/trace)
+;; Author: Thomas Haddy 4/25/19
 (provide (all-defined-out))
-;(require "program.rkt")
+(require "program.rkt")
 
 #| ###################################################################### |#
+
+;;synchk
+(define (synchk P)
+  (if (list? P)
+      (if (null? (cdr P))  ;; P contains just one
+          (synchkStmt (car P))
+          (and (synchkStmt (car P))
+               (synchk (cdr P))))
+      false))
+
+(define (synchkStmt S)
+  (and (list? S)
+       (or
+        ;; declaration
+        (and (equal? (car S) 'decl)
+             (equal? (length S) 2)
+             (symbol? (cadr S)))
+     
+        ;; assignment 
+        (and (equal? (car S) 'assign)
+             (equal? (length S) 3)
+             (symbol? (cadr S))
+             (arithExpr (cadr (cdr S))))
+        ;; if
+        (and (equal? (car S) 'if)
+             (equal? (length S) 3)
+             (condExpr (cadr S))
+             (synchk (cadr (cdr S)))))))
+
+(define (arithExpr E)
+  (or
+   ;; number
+   (number? E)
+   ;; variable   
+   (symbol? E)
+   ;; operator operand operand   
+   (and (or (equal? (car E) '+) (equal? (car E) '-) (equal? (car E) '/) (equal? (car E) '*) )
+        (equal? (length E) 3)
+        (arithExpr (cadr E))
+        (arithExpr (cadr (cdr E))))))
+  
+(define (condExpr E)
+  (and (list? E)
+       (or
+        ;; gt, lt, eq
+        (boolExpr E)
+        ;; or, and, 
+        (and
+         (or (equal? (car E) 'and) (equal? (car E) 'or))
+         (equal? (length E) 3)
+         (condExpr (cadr E))
+         (condExpr (cadr (cdr E))))
+        ;; not
+        (and
+         (equal? (car E) 'not)
+         (equal? (length E) 2)
+         (condExpr (cadr E))))))
+  
+(define (boolExpr E)
+  (and
+       (or (equal? (car E) 'gt) (equal? (car E) 'lt) (equal? (car E) 'eq))
+       (arithExpr (cadr E))
+       (arithExpr (cadr (cdr E)))))
 
 ;; semantics of a program = semantics of rest of the program in the context of semantics of first statement
 ;; Added in a Heap for references
@@ -15,6 +77,7 @@
            (car (semstmt (car P) Env Heap))
            (cadr (semstmt (car P) Env Heap)))))
 
+;; Semantics of a Statement
 (define (semstmt S Env Heap)
   (cond
     ;; declaration 
@@ -24,130 +87,141 @@
                                                  (semArith (cadr (cdr S)) Env)
                                                  Env) Heap)]
     ;; if
-    [(equal? (car S) 'if) (remove-marker-car (semIf (semcomplexcond (cadr S) Env) ;; condExpr
+    [(equal? (car S) 'if) (removemarkernew (semIf (semcomplexcond (cadr S) Env) ;; condExpr
                                                     (cadr (cdr S)) ;; sequence of stmts
                                                     (cons (list '$m 0) Env) Heap))]
     ;; fundecl (fundecl (fname Paramlst) fDef) 
     [(equal? (car S) 'fundecl) (list (cons (list (cadr S)
                                                  (cadr (cdr S))) Env) Heap)]
     ;; call (call (fname Arglst))
-    [(equal? (car S) 'call) (remove-marker-car (semcall (findDef (car (cadr S))
+    [(equal? (car S) 'call) (removemarkernew (semcall (findDef (car (cadr S))
                                                                  (length (cadr (cadr S)))
                                                                  Env
                                                                  Env)
                                                         (semArithList (cadr (cadr S)) Env)
                                                         (cons (list '$m 0) Env) Heap))]
     ;;References
-    [(equal? (car S) 'ref) (semref Env Heap (cadr S) (caddr S))]
-    [(equal? (car S) 'deref) (semDeref Env Heap (cadr S) (semArith (caddr S) Env))]
-    [(equal? (car S) 'free) (semFree Env Heap (semArith (cadr S) Env))]
-    [(equal? (car S) 'wref) (semWRef Env Heap (semArith (cadr S) Env) (semArith (caddr S) Env))]))
+    [(equal? (car S) 'ref) (semRef Env Heap (car (cdr S)) (car (cdr (cdr S))))]
+    [(equal? (car S) 'deref) (semDeref Env Heap (car (cdr S)) (semArith (car (cdr (cdr S))) Env))]
+    [(equal? (car S) 'free) (semFree Env Heap (semArith (car (cdr S)) Env))]
+    [(equal? (car S) 'wref) (semWRef Env Heap (semArith (car (cdr S)) Env) (semArith (car (cdr (cdr S))) Env))]
+    ))
+
+;; Semantics of ref
+(define (semRef Env Heap Var Value)
+  (if (isHeapFree? Heap)
+      ;;True: Update the env with reference since there is 'free' in heap
+      (list (updateValue Var (car (getFirstFreeEntry Heap)) Env)
+            (updateHeap Heap Value))
+      ;;False: Error, no free entry --> put 'oom' in Env
+      (list Env '(oom))))
+
+;; Semantics of deref
+(define (semDeref Env Heap Dst Src)
+  (cond
+    [(symbol? (car Heap)) (list Env Heap)]
+    ;;Dst index had value 'free' --> print 'fma'
+    [(equal? 'free (getHeapValue Heap Src)) (list Env '(fma))]
+    ;;Update the heap at index Dst with value Src
+    [else (list (updateValue Dst (getHeapValue Heap Src) Env) Heap)]))
+
+;; Semantics of free
+(define (semFree Env Heap Index)
+  (if (hasIndex? Heap Index)
+      ;;True: Free the reference
+      (list Env (updateIndex Heap Index 'free))
+      ;;False: Index wasn't found in heap --> Print 'ooma'
+      (list Env '(ooma))))
 
 ;; Semantics of a wref
 (define (semWRef Env Heap Dst Src)
   (list Env
         (cond
+          ;;Dst index had value 'free' --> print 'fma'
+          [(equal? 'free (getHeapValue Heap Dst)) '(fma)]
+          ;;Dst index wasn't found in heap --> print 'ooma' 
           [(not (hasIndex? Heap Dst)) '(ooma)]
-          [(equal? 'free (get-Heap Heap Dst)) '(fma)]
+          ;;Update the heap at index Dst with value Src
           [else (updateIndex Heap Dst Src)])))
 
-;; Does the Heap contain the index i?
-;; (hasIndex? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 2)
-;; #t
-;;
-;; (hasIndex? '((1 'fasdfsadfdsagfdsag) (2 'fdsfdsfdsfds)) 3)
-;; #f
+;; hasIndex? goes through the heap looking for the Index given
+;; Return: returns true if found, false if not found
 (define (hasIndex? Heap Index)
   (if (null? Heap)
+      ;;True: Index wasn't found in heap. Return false
       #f
+      ;;False: Index will either be found here, or recurse the heap until it does
       (or (equal? Index (car (car Heap)))
           (hasIndex? (cdr Heap) Index))))
 
-;; change the value of index i
-;; (updateIndex '((1 1) (2 2)) 2 'sausage)
-;; '((1 1) (2 sausage))
-;;
-;; (updateIndex '((1 1) (2 2)) 3 'sausage)
-;; THIS WILL CRASH
+;; updateIndex updates index Index with value Value, assuming it's there.
+;; Return: If true, returns the newly constructed heap. Otherwise the index to be updated
+;;         was never found, so it returns false
 (define (updateIndex Heap Index Value)
-  (if (equal? (car (car Heap)) Index)
-      (cons (list (car (car Heap)) Value)
-            (cdr Heap))
-      (cons (car Heap) (updateIndex (cdr Heap) Index Value))))
+  (if (null? Heap)
+      ;;True
+      #f
+      ;;False
+      (if (equal? (car (car Heap)) Index)
+          ;;True: Append the new index value to the heap
+          (cons (list (car (car Heap)) Value) (cdr Heap))
+          ;;False: Recurse through the heap until the Index is found
+          (cons (car Heap) (updateIndex (cdr Heap) Index Value)))))
 
-;; Semantics of free
-(define (semFree Env Heap Index)
-  (if (hasIndex? Heap Index)
-      (list Env (updateIndex Heap Index 'free))
-      (list Env '(ooma))))
+;; isHeapFree? recurses through the heap looking for 'free'
+;; Return: True if 'free' was found in the heap, false otherwise
+(define (isHeapFree? Heap)
+  (if (null? Heap)
+      ;;True
+      #f
+      ;;False: Check if front of heap has free entry, otherwise recurse the rest of heap
+      (or (isEntryFree? (car Heap))
+          (isHeapFree? (cdr Heap)))))
 
-;; from the pdf
-;; (semDeref '((y 0)) '((1 200)) 'y 1)
-;; '(((y 200)) ((1 200)))
-(define (semDeref Env Heap Dst Src)
-  (cond
-    [(symbol? (car Heap)) (list Env Heap)]
-    [(equal? 'free (get-Heap Heap Src)) (list Env '(fma))]
-    [else (list (updateValue Dst (get-Heap Heap Src) Env) Heap)]))
-
-;; is this entry free
-;; (isEntryFree? '(1 free))
-;; #t
-;;
-;; (isEntryFree? '(1 23324324))
-;; #f
+;; isEntryFree? checks if a given entry in the heap contains 'free' in it.
+;; Return: True if 'free' is in entry, otherwise false
 (define (isEntryFree? Entry)  
   (equal? 'free (car (cdr Entry))))
 
-;; is there a free space in the Heap?
-;; (Heap-free? '((1 2343) (2 free)))
-;; #t
-;;
-;; (Heap-free? '((1 2343) (2 2343)))
-;; #f
-(define (Heap-free? Heap)
+;; getFirstFreeEntry will get the first free entry in the heap
+;; Return: returns the first entry starting from the left of the heap that has 'free' in it,
+;;         false otherwise 
+(define (getFirstFreeEntry Heap)
   (if (null? Heap)
+      ;;True
       #f
-      (or (isEntryFree? (car Heap))
-          (Heap-free? (cdr Heap)))))
+      ;;False
+      (if (isEntryFree? (car Heap))
+          ;;True: Return the entry with 'free' in it
+          (car Heap)
+          ;;False: Recurse until we find 'free' entry in heap
+          (getFirstFreeEntry (cdr Heap)))))
 
-;; first free entry
-;; (first-free '((1 233) (2 free) (3 free)))
-;; '(2 free)
-(define (first-free Heap)
+;; updateEntry updates a given entry Entry with value Value
+;; Return: The newly updated entry
+(define (updateEntry Entry Value)
+  (list (car Entry) Value))
+
+;; updateHeap will update the heap with the given value Value. It will put the Value in
+;; the first free spot in the heap, starting from the left.
+;; Return: returns the updated heap with Value
+(define (updateHeap Heap Value)
   (if (isEntryFree? (car Heap))
-      (car Heap)
-      (first-free (cdr Heap))))
-
-;; from the pdf
-;; (semref '((x 0)) '((1 free)) 'x 123)
-;; '(((x 1)) ((1 123)))
-(define (semref Env Heap var val)
-  (if (Heap-free? Heap)
-      (list (updateValue var (car (first-free Heap)) Env)
-            (update-Heap Heap val))
-      (list Env '(oom))))
-
-;; (update-entry '(1 free) 23)
-;; '(1 23)
-(define (update-entry entry v)
-  (list (car entry) v))
-
-;; (update-Heap '((1 free) (2 free)) 123)
-;; '((1 123) (2 free))
-(define (update-Heap Heap v)
-  (if (isEntryFree? (car Heap))
-      (cons (update-entry (car Heap) v)
+      ;;True: Free spot was found, update the heap
+      (cons (updateEntry (car Heap) Value)
             (cdr Heap))
+      ;;False: Recurse through heap until 'free' is found
       (cons (car Heap)
-            (update-Heap (cdr Heap) v))))
+            (updateHeap (cdr Heap) Value))))
 
-;; (get-Heap '((1 free) (2 234)) 2)
-;; 234
-(define (get-Heap Heap i)
-  (if (equal? (caar Heap) i)
-      (cadar Heap)
-      (get-Heap (cdr Heap) i)))
+;; getHeapValue gets the heap value at a given index
+;; Return: Heap value at given index
+(define (getHeapValue Heap Index)
+  (if (equal? (car (car Heap)) Index)
+      ;;True: return the heap value
+      (car (cdr (car Heap)))
+      ;;False: Recurse through heap looking for index
+      (getHeapValue (cdr Heap) Index)))
 
 
 #| This part is for functions |#
@@ -210,7 +284,7 @@
       (cdr Env)
       (removemarker (cdr Env))))
 
-(define (remove-marker-car l)
+(define (removemarkernew l)
   (list (removemarker (car l))
         (cdr l)))
 
@@ -261,72 +335,3 @@
                                    (semArith (cadr (cdr BCond)) Env)) ]
     [ (equal? (car BCond) 'eq)  (equal? (semArith (cadr BCond) Env)
                                         (semArith (cadr (cdr BCond)) Env)) ]))
-
-(define p0
-'(
-(decl x)
-(decl y)
-(ref x 10)
-(deref y x)
-)
-)
-(sem p0 '() '((1 free) (2 free)))
-; '(((y 10) (x 1))
-; ((1 10) (2 free)))
-(sem p0 '() '((1 20) (2 free)))
-; '(((y 10) (x 2))
-; ((1 20) (2 10)))
-(sem p0 '() '((1 20) (2 40)))
-; '(((y 0) (x 0))
-; (oom))
-(define p1
-'(
-(decl x)
-(decl y)
-(ref x 10)
-(wref x 30)
-(deref y x)
-(free x)
-)
-)
-(sem p1 '() '((1 free) (2 free)))
-; '(((y 30) (x 1)) ((1 free) (2 free)))
-(define p5
-'(
-(decl x)
-(assign x 0)
-(free x)
-)
-)
-(sem p5 '() '((1 free)))
-; '(((x 0)) (ooma))
-(define p6
-'(
-(decl x)
-(deref x 1)
-)
-)
-(sem p6 '() '((1 free)))
-
-; '(((x 0)) (fma))
-(define p2
-'(
-(fundecl (swap (x y)) (
-(decl temp1)
-(decl temp2)
-(deref temp1 x)
-(deref temp2 y)
-(wref x temp2)
-(wref y temp1)
-)
-)
-(decl a)
-(decl b)
-(assign a 1)
-(assign b 2)
-(call (swap (a b)))
-)
-)
-(sem p2 '() '((1 20) (2 500)))
-
-
