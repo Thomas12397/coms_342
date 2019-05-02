@@ -24,9 +24,11 @@
                   (black electric skoda)))
 
 (define (filter condition lst)
-  (cond [(null? lst) '()]
-        [(condition (car lst)) (cons (car lst) (filter condition (cdr lst)))]
-        [(filter condition (cdr lst))]))
+  (cond
+    [(null? lst) '()]
+    [(condition (car lst)) (cons (car lst) (filter condition (cdr lst)))]
+    [(filter condition (cdr lst))]
+    ))
 
 ;;getPreferences gets the preferences of a value from choices
 ;; '(black (red blue white)
@@ -39,14 +41,11 @@
     [else (getPreferences (cdr choices) value)]
     ))
 
-;; isInLst? checks if the element is found in a list
-;; (isInLst? carlist '(red electric tesla))
+;; isEdge? checks to see if node1 points to node2 in prefs
+;; (isEdge? attr1 'black 'red)
 ;; > #t
-(define (isInLst? lst element)
-  (cond [(null? lst) #f]
-        [(equal? (car lst) element) #t]
-        [else (isInLst? (cdr lst) element)]
-        ))
+(define (isEdge? prefs node1 node2)
+  (isInLst? (getPreferences prefs node1) node2))
 
 ;; doesExist? checks to see if a condition exists inside of a list
 (define (doesExist? condition lst)
@@ -56,11 +55,15 @@
     [else (doesExist? condition (cdr lst))]
     ))
 
-;; isEdge? checks to see if node1 points to node2 in prefs
-;; (isEdge? attr1 'black 'red)
+;; isInLst? checks if the element is found in a list
+;; (isInLst? carlist '(red electric tesla))
 ;; > #t
-(define (isEdge? prefs node1 node2)
-  (isInLst? (getPreferences prefs node1) node2))
+(define (isInLst? lst element)
+  (cond
+    [(null? lst) #f]
+    [(equal? (car lst) element) #t]
+    [else (isInLst? (cdr lst) element)]
+    ))
 
 ;; isThereAPath? checks to see if there is a path from node1 to node2 based on choices
 (define (isThereAPath? choices node1 node2)
@@ -112,4 +115,4 @@
        attr2
        attr3)))
 
-;(weakorder carlist attr1 attr2 attr3)
+(weakorder carlist attr1 attr2 attr3)
